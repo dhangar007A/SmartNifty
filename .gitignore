@@ -1,8 +1,12 @@
 /.vscode
-/logs
 /test
 
 /Python/__pycache__
+/Python/logs
+
+/C++/build
+
+/tickers
 
 .env
 

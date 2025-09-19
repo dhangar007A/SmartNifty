@@ -1,7 +1,8 @@
 #include "OptionChainCreater.hpp"
 
-StrikeToTokenMapper::StrikeToTokenMapper(string path){
+StrikeToTokenMapper :: StrikeToTokenMapper(string path, string OptionExpiry, string FutureExpiry){
     ifstream Ticker(path);
+
     if(!Ticker.is_open()){
         cerr << "Error opening Ticker file: " << path << endl;
         return;
@@ -19,9 +20,12 @@ StrikeToTokenMapper::StrikeToTokenMapper(string path){
             getline(ss, expiry, ',');
 
             if(option == "50") m_50_token = stoi(token);
-            if(option == "UT") m_UT_token = stoi(token);
+
+            if(option == "UT" && expiry == FutureExpiry) 
+                m_UT_token = stoi(token);
             
-            M.insert({{stoi(strike), option}, stoi(token)});
+            if((option == "CE" || option == "PE") && expiry == OptionExpiry)
+                M.insert({{stoi(strike), option}, stoi(token)});
 
         }catch(...){
             cerr << "Skipping invalid row: " << line << endl;
@@ -31,8 +35,7 @@ StrikeToTokenMapper::StrikeToTokenMapper(string path){
     Ticker.close();
 }
 
-
-int StrikeToTokenMapper::getToken(int strike, const string& option) const {
+int StrikeToTokenMapper :: getToken(int strike, const string& option) const {
     auto i = M.find({strike, option});
 
     if(i != M.end()) 
@@ -41,12 +44,10 @@ int StrikeToTokenMapper::getToken(int strike, const string& option) const {
     return -1;
 }
 
+OptionChainCreater :: OptionChainCreater(int UR, int LR, string path, string OptionExpiry, string FutureExpiry)
+                        : m_UR(UR), m_LR(LR), StrikeToTokenMapper(path, OptionExpiry, FutureExpiry) {}
 
-OptionChainCreater::OptionChainCreater(int UR, int LR, string path)
-                        : m_UR(UR), m_LR(LR), StrikeToTokenMapper(path) {}
-
-
-vector<double> OptionChainCreater::getLTP(string path){
+vector<double> OptionChainCreater :: getLTP(string path){
     ifstream file(path, ios::binary);
 
     const size_t count = 7;
@@ -63,23 +64,15 @@ vector<double> OptionChainCreater::getLTP(string path){
     return row;
 }
 
-
-pair<string, string> OptionChainCreater::getTimestamp(int unix_time){
-    char buf1[80], buf2[80];
-    time_t curr_time = time(nullptr);
+string OptionChainCreater :: getTimestamp(long long unix_time){
+    char buf[80];
     time_t exch_time = unix_time;
-        
-    struct tm *timeinfo1 = localtime(&curr_time);
-    struct tm *timeinfo2 = localtime(&exch_time);
-
-    strftime(buf1, sizeof(buf1), "%Y-%m-%d %H:%M:%S", timeinfo1);
-    strftime(buf2, sizeof(buf2), "%Y-%m-%d %H:%M:%S", timeinfo2);
-        
-    return {buf1, buf2};
+    struct tm *timeinfo = localtime(&exch_time);
+    strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", timeinfo);
+    return buf;
 }
 
-
-void OptionChainCreater::readTokenData(string path, int strike_diff){
+void OptionChainCreater :: readTokenData(string path, int strike_diff){
     string m_50_path = path + to_string(m_50_token);
     string m_UT_path = path + to_string(m_UT_token);
 
@@ -94,22 +87,34 @@ void OptionChainCreater::readTokenData(string path, int strike_diff){
         return ((diff1 < diff2) ? (spot - diff1) : (spot + diff2));
     };
 
-    for(int i = 0; ; i++) {
+    for(int i = 0; ; i++){
         vector<double> row = getLTP(m_50_path);
-        int exch_time = row[0] / 1000;
-            
-        auto [curr, exch] = getTimestamp(exch_time);
+        long long exch_time = row[0] / 1000;
         int ATM = getATM(row[1] / 100);
 
-        if(!Ok) {
+        vector<double> new_sf(2);
+        {
+            cout << fixed << setprecision(2);
+            new_sf[0] = row[1] / 100;
+        }
+
+        row = getLTP(m_UT_path);
+        new_sf[1] = row[1] / 100;
+
+        {
+            lock_guard<mutex> lock(mtx);
+            m_SF = move(new_sf);
+            m_ET = move(row[0] / 1000);
+        }
+
+        if(!Ok){
             for(int i = -m_UR; i <= m_LR; i++)
                 strikes.push_back(ATM + (i * strike_diff));
 
             Ok = 1;
-        } else {
-            
+        }else{
             int diff = ATM - last_ATM;
-            for(int k = min(0, diff); k < max(0, diff); k += strike_diff) {
+            for(int k = min(0, diff); k < max(0, diff); k += strike_diff){
                 if(k < 0){
                     int new_strike = strikes.front() - strike_diff;
                     strikes.push_front(new_strike);
@@ -127,7 +132,7 @@ void OptionChainCreater::readTokenData(string path, int strike_diff){
         };
 
         vector<OptionChainFormat> new_oc;
-        for(auto k : strikes) {
+        for(auto k : strikes){
             int token1 = getToken(k, "CE");
             string path1 = path + to_string(token1);
             vector<double> row1 = getLTP(path1);
@@ -155,9 +160,6 @@ void OptionChainCreater::readTokenData(string path, int strike_diff){
             oc_row.oi1 = round2Digit(row1[4] / 100000.0);
             oc_row.oi2 = round2Digit(row2[4] / 100000.0);
             
-            oc_row.bsr1 = round2Digit(row1[5] / (double) row1[6]);
-            oc_row.bsr2 = round2Digit(row2[5] / (double) row2[6]);
-            
             oc_row.strike = k;
             
             new_oc.push_back(oc_row);
@@ -169,11 +171,21 @@ void OptionChainCreater::readTokenData(string path, int strike_diff){
         }
 
         last_ATM = ATM;
-        this_thread::sleep_for(chrono::milliseconds(1000));
+        this_thread::sleep_for(chrono::milliseconds(500));
     }
 }
 
 vector<OptionChainFormat> OptionChainCreater::getOptionChain(){
     lock_guard<mutex> lock(mtx);
     return m_OC;
+}
+
+vector<double> OptionChainCreater::getSpotFuture(){
+    lock_guard<mutex> lock(mtx);
+    return m_SF;
+}
+
+long long OptionChainCreater::getExcahngeTimestamp(){
+    lock_guard<mutex> lock(mtx);
+    return m_ET;
 }

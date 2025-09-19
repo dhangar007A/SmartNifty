@@ -1,0 +1,6 @@
+# Ignore Me!
+OptionExpiry=2025-09-30
+FutureExpiry=2025-09-30
+UpperRange=10
+LowerRange=10
+StrikeDiff=50

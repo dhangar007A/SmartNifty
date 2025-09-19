@@ -3,8 +3,8 @@
 using namespace std;
 
 struct OptionChainFormat{
-    double ltp1, change1, volume1, oi1, bsr1;
-    double ltp2, change2, volume2, oi2, bsr2;
+    double ltp1, change1, volume1, oi1;
+    double ltp2, change2, volume2, oi2;
     int strike;
 };
 
@@ -16,28 +16,34 @@ public:
     int m_50_token {};
     int m_UT_token {};
 
-    StrikeToTokenMapper(string path);
+    StrikeToTokenMapper(string path, string OptionExpiry, string FutureExpiry);
     
     int getToken(int strike, const string& option) const;
 };
 
-class OptionChainCreater : public StrikeToTokenMapper {
+class OptionChainCreater : public StrikeToTokenMapper{
 private:
     int m_UR, m_LR;
     mutable mutex mtx;
     
-    vector<OptionChainFormat> m_OC;
+    vector<OptionChainFormat> m_OC; // OC -> OptionChain
+    vector<double> m_SF; // SF -> SpotFuture
+    long long m_ET; // ET -> ExchangeTimestamp
 
 public:
-    OptionChainCreater(int UR, int LR, string path);
+    OptionChainCreater(int UR, int LR, string path, string OptionExpiry, string FutureExpiry);
 
     vector<double> getLTP(string path);
     
-    pair<string, string> getTimestamp(int unix_time);
+    string getTimestamp(long long unix_time);
     
     void readTokenData(string path, int strike_diff);
     
     vector<OptionChainFormat> getOptionChain();
+
+    vector<double> getSpotFuture();
+
+    long long getExcahngeTimestamp();
     
     friend class TablePlotter;
 };

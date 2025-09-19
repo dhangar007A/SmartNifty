@@ -2,7 +2,9 @@ from SmartApi.smartWebSocketV2 import SmartWebSocketV2
 from dotenv import load_dotenv
 from logzero import logger
 
+from concurrent.futures import ThreadPoolExecutor
 import sysv_ipc, json, threading, os
+import numpy as np
 
 from Session import SessionGenerator
 
@@ -18,38 +20,54 @@ class DataFeeder(SessionGenerator):
 
     def PrepareQueueList(self, PASSWORD, TOTP_SECRET):
         super().GenerateSession(self.CLIENT_CODE, PASSWORD, TOTP_SECRET)
-        Token = list(map(str, self.df["token"].tolist()))
+
+        df1 = self.df[self.df["option"] == "50"]
+        Token1 = list(map(str, df1["token"].tolist()))
+
+        df2 = self.df[self.df["option"] == "UT"]
+        Token2 = list(map(str, df2["token"].tolist()))
+        
+        df3 = self.df[self.df["option"].isin(["CE", "PE"])]
+        Token3 = list(map(str, df3["token"].tolist()))
 
         token_list1 = [
             {
-                "exchangeType": 2, 
-                "tokens": [Token[0]]
+                "exchangeType": 1, 
+                "tokens": Token1
             }
         ]
 
         token_list2 = [
             {
-                "exchangeType": 1, 
-                "tokens": [Token[1]]
+                "exchangeType": 2, 
+                "tokens": Token2
             }
         ]
 
-        token_list3 = [
-            {
-                "exchangeType": 2, 
-                "tokens": Token[2 : ]
-            }
-        ]
+        token = []
+        token.append(token_list1)
+        token.append(token_list2)
+
+        array = np.array_split(np.array(Token3), 10)
+        for i in array :
+            token_list = [
+                {
+                    "exchangeType": 2, 
+                    "tokens": i.tolist()
+                }
+            ]
+
+            token.append(token_list)
 
         try:
             queue = sysv_ipc.MessageQueue(645, sysv_ipc.IPC_CREX)
         except Exception as e:
             queue = sysv_ipc.MessageQueue(645)
 
-        return token_list1, token_list2, token_list3, queue
+        return token, queue
     
     def SendData(self, PASSWORD, TOTP_SECRET):
-        l1, l2, l3, Queue = self.PrepareQueueList(PASSWORD, TOTP_SECRET)
+        token, Queue = self.PrepareQueueList(PASSWORD, TOTP_SECRET)
 
         sws = SmartWebSocketV2(self.AUTH_TOKEN, self.API_KEY, self.CLIENT_CODE, self.FEED_TOKEN)
 
@@ -60,9 +78,8 @@ class DataFeeder(SessionGenerator):
 
         def on_open(wsapp):
             logger.info("WebSocket Open")
-            sws.subscribe(correlation_id, mode, l1)
-            sws.subscribe(correlation_id, mode, l2)
-            sws.subscribe(correlation_id, mode, l3)
+            for i in token :
+                sws.subscribe(correlation_id, mode, i)
 
         def on_error(wsapp, error):
             logger.error(f"WebSocket Error: {repr(error)}")

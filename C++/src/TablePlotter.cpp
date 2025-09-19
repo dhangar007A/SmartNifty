@@ -10,15 +10,15 @@ string TablePlotter::toString(double x){
     return ss.str();
 }
 
-void TablePlotter::prepareTable(vector<OptionChainFormat>& v){
+void TablePlotter::prepareOptionChainTable(vector<OptionChainFormat>& v){
     Table OptionChain;
-    OptionChain.add_row({"BSR1", "OI1", "VOLUME1", "% CHANGE1", "LTP1", "STRIKE", "LTP2", "% CHANGE2", "VOLUME2", "OI2", "BSR2"});
+    OptionChain.add_row({"OI1", "VOLUME1", "% CHANGE1", "LTP1", "STRIKE", "LTP2", "% CHANGE2", "VOLUME2", "OI2"});
 
     for(auto k : v){
         OptionChain.add_row({
-            toString(k.bsr1), toString(k.oi1), toString(k.volume1), toString(k.change1),
+            toString(k.oi1), toString(k.volume1), toString(k.change1),
             toString(k.ltp1), to_string(k.strike), toString(k.ltp2),
-            toString(k.change2), toString(k.volume2), toString(k.oi2), toString(k.bsr2)
+            toString(k.change2), toString(k.volume2), toString(k.oi2)
         });   
     }
 
@@ -47,11 +47,37 @@ void TablePlotter::prepareTable(vector<OptionChainFormat>& v){
     cout << OptionChain << endl;
 }
 
-void TablePlotter::displayTable(OptionChainCreater& f) {
+void TablePlotter::displayOptionChain(OptionChainCreater& f){
     vector<OptionChainFormat> v = f.m_OC;
-    prepareTable(v);
+    prepareOptionChainTable(v);
 }
 
-void TablePlotter::displayTable(vector<OptionChainFormat>& v) {
-    prepareTable(v);
+void TablePlotter::displayOptionChain(vector<OptionChainFormat>& v){
+    prepareOptionChainTable(v);
+}
+
+void TablePlotter::prepareSpotFutureTable(vector<double>& v){
+    Table SpotFuture;
+    SpotFuture.add_row({" ", "SPOT", "FUT"});
+    SpotFuture.add_row({"LTP", toString(v[0]), toString(v[1])});
+    
+    SpotFuture[0].format()
+        .font_style({FontStyle::bold});
+
+    int SFsize = SpotFuture.size();
+    for(size_t i = 0; i < SFsize; i++){
+        SpotFuture[i].format()
+        .font_align(FontAlign::center);
+    }
+
+    cout << SpotFuture << endl;
+}
+
+void TablePlotter::displaySpotFuture(OptionChainCreater& f){
+    vector<double> v = f.m_SF;
+    prepareSpotFutureTable(v);
+}
+
+void TablePlotter::displaySpotFuture(vector<double>& v){
+    prepareSpotFutureTable(v);
 }

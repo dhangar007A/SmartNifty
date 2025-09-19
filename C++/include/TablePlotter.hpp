@@ -7,10 +7,15 @@ using namespace tabulate;
 
 class TablePlotter{
 public:
-    void prepareTable(vector<OptionChainFormat>& v);
-    
     string toString(double x);
 
-    void displayTable(OptionChainCreater& f);
-    void displayTable(vector<OptionChainFormat>& v);
+    void prepareOptionChainTable(vector<OptionChainFormat>& v);
+    
+    void displayOptionChain(OptionChainCreater& f);
+    void displayOptionChain(vector<OptionChainFormat>& v);
+
+    void prepareSpotFutureTable(vector<double>& v);
+    
+    void displaySpotFuture(OptionChainCreater& f);
+    void displaySpotFuture(vector<double>& v);
 };

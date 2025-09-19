@@ -4,8 +4,12 @@ import pandas as pd
 
 import os, requests, shutil
 import pyotp, json
+import warnings
+
+warnings.filterwarnings("ignore")
 
 parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+tickers = os.path.join(parent, "tickers")
 
 pd.set_option('display.max_rows', 500)
 
@@ -40,23 +44,25 @@ class TickerGenerator:
             df["expiry"] = pd.to_datetime(df["expiry"], errors="coerce")
             df["strike"] = pd.to_numeric(df["strike"], errors="coerce").fillna(0).astype(int) // 100
 
-            df3 = df[df["instrumenttype"] == "OPTIDX"]
-            df3 = df3[df3["expiry"] == df3["expiry"].min()]
+            df["expiry"] = df["expiry"].fillna(pd.to_datetime(df["expiry"].min()))
 
-            df2 = df[df["instrumenttype"] == "FUTIDX"]
-            df2 = df2[df2["expiry"] == df2["expiry"].min()]
+            mask4 = (df["instrumenttype"].isin(["AMXIDX", "FUTIDX"]))
+            df1 = df[mask4]
 
-            df1 = df[df["instrumenttype"] == "AMXIDX"].copy()
-            df1["expiry"] = df1["expiry"].fillna(pd.to_datetime(df2["expiry"].min()))
+            expiry = df["expiry"].value_counts()
+            expiry = list(expiry[expiry > 100].index)
+            df2 = df[df["expiry"].isin(expiry)]
+
+            mask5 = (df["instrumenttype"].isin(["OPTIDX"]))
+            df2 = df2[mask5]
 
             df = pd.DataFrame()
-            for i in [df1, df2, df3]:
+            for i in [df1, df2]:
                 i["expiry"] = i["expiry"].dt.date
                 df = pd.concat([df, i], ignore_index=True)
 
             df = df[["strike", "option", "token", "expiry"]]
             df = df.sort_values(by=["strike", "option", "token", "expiry"])
-            df.iloc[0, df.columns.get_loc("strike")] = 0.0
 
             df.to_csv(os.path.join(parent, "Ticker.csv"), index=False)
             return df
@@ -65,8 +71,7 @@ class TickerGenerator:
             print(f"Error fetching URL: {e}")
 
     def PrepareTicker(self):
-        tickers = os.path.join(parent, "tickers")
-        ClearFolder(os.path.join(parent, "logs"))
+        ClearFolder("logs")
         ClearFolder(tickers)
 
         tokens = self.df['token'].tolist()

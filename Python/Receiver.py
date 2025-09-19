@@ -16,6 +16,7 @@ while True:
     message = json.loads(message)
 
     token = message.get('token')
+    print(token)
 
     path = f"file://{os.path.join(tickers, str(token))}"
     arr = sa.attach(path)
@@ -28,7 +29,7 @@ while True:
     arr[5] = message.get('total_buy_quantity') 
     arr[6] = message.get('total_sell_quantity') 
 
-    with open(f"./tickers/{token}", "r+b") as f:
+    with open(f"{tickers}/{token}", "r+b") as f:
         mm = mmap.mmap(f.fileno(), 0)
         mm.flush()
         mm.close()
