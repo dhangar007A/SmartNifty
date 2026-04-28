@@ -1,5 +1,18 @@
 #pragma once
-#include <bits/stdc++.h>
+#include <iostream>
+#include <vector>
+#include <string>
+#include <map>
+#include <fstream>
+#include <sstream>
+#include <cmath>
+#include <thread>
+#include <mutex>
+#include <deque>
+#include <functional>
+#include <chrono>
+#include <iomanip>
+
 using namespace std;
 
 struct OptionChainFormat{

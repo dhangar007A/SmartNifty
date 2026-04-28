@@ -1,5 +1,4 @@
 from SmartApi import SmartConnect
-import SharedArray as sa
 import pandas as pd
 
 import os, requests, shutil
@@ -76,14 +75,12 @@ class TickerGenerator:
 
         tokens = self.df['token'].tolist()
         
-        size = 5000
-        dtype = 'float64'
         for token in tokens:
-            path = f"file://{os.path.join(tickers, str(token))}"
+            path = os.path.join(tickers, str(token))
             try:
-                sa.create(path, size, dtype=dtype)
-            except FileExistsError:
-                print(f"Ticker for token {token} already exists. Skipping.")
+                if not os.path.exists(path):
+                    with open(path, "wb") as f:
+                        f.write(b'\x00' * 56) # 7 doubles = 56 bytes
             except Exception as e:
                 print(f"Error creating ticker for token {token}: {e}")
 

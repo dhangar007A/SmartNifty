@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from logzero import logger
 
 from concurrent.futures import ThreadPoolExecutor
-import sysv_ipc, json, threading, os
+import json, threading, os, queue, struct, mmap
 import numpy as np
 
 from Session import SessionGenerator
@@ -59,12 +59,8 @@ class DataFeeder(SessionGenerator):
 
             token.append(token_list)
 
-        try:
-            queue = sysv_ipc.MessageQueue(645, sysv_ipc.IPC_CREX)
-        except Exception as e:
-            queue = sysv_ipc.MessageQueue(645)
-
-        return token, queue
+        q = queue.Queue()
+        return token, q
     
     def SendData(self, PASSWORD, TOTP_SECRET):
         token, Queue = self.PrepareQueueList(PASSWORD, TOTP_SECRET)
@@ -72,9 +68,7 @@ class DataFeeder(SessionGenerator):
         sws = SmartWebSocketV2(self.AUTH_TOKEN, self.API_KEY, self.CLIENT_CODE, self.FEED_TOKEN)
 
         def on_data(wsapp, message):
-            data = json.dumps(message)
-            Queue.send(data)
-            print(data)
+            Queue.put(message)
 
         def on_open(wsapp):
             logger.info("WebSocket Open")
@@ -91,6 +85,38 @@ class DataFeeder(SessionGenerator):
         sws.on_data = on_data
         sws.on_error = on_error
         sws.on_close = on_close
+
+        def consumer_thread(q, tickers_dir):
+            while True:
+                try:
+                    message = q.get()
+                    token = message.get('token')
+                    if not token:
+                        continue
+                        
+                    print(token)
+                    path = os.path.join(tickers_dir, str(token))
+                    if not os.path.exists(path):
+                        continue
+                        
+                    v0 = float(message.get('exchange_timestamp', 0))
+                    v1 = float(message.get('last_traded_price', 0))
+                    v2 = float(message.get('closed_price', 0))
+                    v3 = float(message.get('volume_trade_for_the_day', 0))
+                    v4 = float(message.get('open_interest', 0))
+                    v5 = float(message.get('total_buy_quantity', 0))
+                    v6 = float(message.get('total_sell_quantity', 0))
+                    
+                    with open(path, "r+b") as f:
+                        with mmap.mmap(f.fileno(), 0) as mm:
+                            struct.pack_into('ddddddd', mm, 0, v0, v1, v2, v3, v4, v5, v6)
+                except Exception as e:
+                    print(f"Error processing tick: {e}")
+
+        logger.info("Starting consumer thread...")
+        parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        tickers_dir = os.path.join(parent, "tickers")
+        threading.Thread(target=consumer_thread, args=(Queue, tickers_dir), daemon=True).start()
 
         logger.info("Connecting to WebSocket...")
         threading.Thread(target=sws.connect).start()
